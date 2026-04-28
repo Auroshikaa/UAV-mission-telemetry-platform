@@ -4,16 +4,18 @@ import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
+
 DATABASE_NAME = "uav_mission.db"
 
 
 def load_data() -> pd.DataFrame:
+    """Load stored UAV telemetry from the mission database."""
     connection = sqlite3.connect(DATABASE_NAME)
 
     query = """
-    SELECT *
-    FROM telemetry
-    ORDER BY timestamp DESC
+        SELECT *
+        FROM telemetry
+        ORDER BY timestamp DESC
     """
 
     df = pd.read_sql_query(query, connection)
@@ -44,8 +46,8 @@ else:
         uav_options
     )
 
+    # Each UAV gets its own mission view instead of mixing fleet telemetry.
     filtered_df = df[df["uav_id"] == selected_uav].copy()
-
     latest = filtered_df.iloc[0]
 
     st.subheader("Current Mission Status")
@@ -74,29 +76,21 @@ else:
     col7.metric("Motor Temp (°C)", latest["motor_temp_c"])
     col8.metric("Signal Strength", latest["signal_strength"])
 
-    st.subheader("Telemetry Trends")
-
     chart_df = filtered_df.sort_values("timestamp")
 
+    st.subheader("Telemetry Trends")
+
     st.write("Altitude Over Time")
-    st.line_chart(
-        chart_df.set_index("timestamp")["altitude_m"]
-    )
+    st.line_chart(chart_df.set_index("timestamp")["altitude_m"])
 
     st.write("Battery Over Time")
-    st.line_chart(
-        chart_df.set_index("timestamp")["battery_percent"]
-    )
+    st.line_chart(chart_df.set_index("timestamp")["battery_percent"])
 
     st.write("Motor Temperature Over Time")
-    st.line_chart(
-        chart_df.set_index("timestamp")["motor_temp_c"]
-    )
+    st.line_chart(chart_df.set_index("timestamp")["motor_temp_c"])
 
     st.write("Signal Strength Over Time")
-    st.line_chart(
-        chart_df.set_index("timestamp")["signal_strength"]
-    )
+    st.line_chart(chart_df.set_index("timestamp")["signal_strength"])
 
     st.subheader("Recent Mission Log")
 

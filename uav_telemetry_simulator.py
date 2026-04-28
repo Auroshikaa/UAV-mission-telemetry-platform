@@ -15,7 +15,7 @@ MISSION_PHASES = [
     "SURVEILLANCE",
     "RETURN_HOME",
     "LANDING",
-    "MISSION_COMPLETE"
+    "MISSION_COMPLETE",
 ]
 
 UAV_FLEET = [
@@ -51,21 +51,24 @@ UAV_FLEET = [
 
 
 def generate_fault(uav: dict) -> str:
+    """Inject mission faults based on each UAV's reliability profile."""
     roll = random.random()
+    fault_chance = uav["fault_chance"]
 
-    if roll < uav["fault_chance"] * 0.25:
+    if roll < fault_chance * 0.25:
         return "GPS_SIGNAL_LOSS"
-    elif roll < uav["fault_chance"] * 0.50:
+    elif roll < fault_chance * 0.50:
         return "LOW_BATTERY_WARNING"
-    elif roll < uav["fault_chance"] * 0.75:
+    elif roll < fault_chance * 0.75:
         return "MOTOR_OVERHEAT"
-    elif roll < uav["fault_chance"]:
+    elif roll < fault_chance:
         return "COMMUNICATION_WEAK_SIGNAL"
-    else:
-        return "NONE"
+
+    return "NONE"
 
 
 def get_battery_drain(phase: str) -> float:
+    """Battery drain changes by mission phase."""
     if phase == "PRE_FLIGHT":
         return random.uniform(0.5, 1.0)
     elif phase == "TAKEOFF":
@@ -80,22 +83,31 @@ def get_battery_drain(phase: str) -> float:
         return random.uniform(2.0, 4.0)
     elif phase == "LANDING":
         return random.uniform(1.0, 3.0)
-    else:
-        return 0.0
+
+    return 0.0
 
 
-def classify_health(battery: float, motor_temp: float, signal_strength: float, fault: str) -> str:
+def classify_health(
+    battery: float,
+    motor_temp: float,
+    signal_strength: float,
+    fault: str
+) -> str:
+    """Convert raw telemetry and faults into a mission health state."""
     if fault in ["GPS_SIGNAL_LOSS", "MOTOR_OVERHEAT"]:
         return "CRITICAL"
-    elif battery < 25 or motor_temp > 85 or signal_strength < 40:
+
+    if battery < 25 or motor_temp > 85 or signal_strength < 40:
         return "WARNING"
-    elif fault != "NONE":
+
+    if fault != "NONE":
         return "WARNING"
-    else:
-        return "NORMAL"
+
+    return "NORMAL"
 
 
 def generate_phase_telemetry(uav: dict, phase: str, battery: float) -> dict:
+    """Generate realistic telemetry for the current UAV and mission phase."""
     if phase == "PRE_FLIGHT":
         altitude = 0
         speed = 0
@@ -141,16 +153,18 @@ def generate_phase_telemetry(uav: dict, phase: str, battery: float) -> dict:
     signal_strength = round(random.uniform(30, 100), 2)
 
     fault = generate_fault(uav)
+
+    # During GPS loss, avoid showing fake valid coordinates.
+    if fault == "GPS_SIGNAL_LOSS":
+        gps_latitude = None
+        gps_longitude = None
+
     health_status = classify_health(
         battery=battery,
         motor_temp=motor_temp,
         signal_strength=signal_strength,
-        fault=fault
+        fault=fault,
     )
-
-    if fault == "GPS_SIGNAL_LOSS":
-        gps_latitude = None
-        gps_longitude = None
 
     return {
         "uav_id": uav["uav_id"],
@@ -165,21 +179,18 @@ def generate_phase_telemetry(uav: dict, phase: str, battery: float) -> dict:
         "gps_longitude": gps_longitude,
         "signal_strength": signal_strength,
         "fault": fault,
-        "health_status": health_status
+        "health_status": health_status,
     }
 
 
 def send_telemetry(telemetry: dict) -> None:
+    """Send UAV telemetry to the ground control API."""
     try:
-        response = requests.post(
-            API_URL,
-            json=telemetry
-        )
+        response = requests.post(API_URL, json=telemetry)
 
         print("Sent telemetry:")
         print(json.dumps(telemetry, indent=2))
-        print("Ground control response:")
-        print(response.json())
+        print("Ground control response:", response.json())
         print("-" * 50)
 
     except requests.exceptions.RequestException as error:
@@ -200,12 +211,15 @@ def main() -> None:
                 uav_id = uav["uav_id"]
 
                 battery_drain = get_battery_drain(phase)
-                fleet_battery[uav_id] = max(0, fleet_battery[uav_id] - battery_drain)
+                fleet_battery[uav_id] = max(
+                    0,
+                    fleet_battery[uav_id] - battery_drain
+                )
 
                 telemetry = generate_phase_telemetry(
                     uav=uav,
                     phase=phase,
-                    battery=fleet_battery[uav_id]
+                    battery=fleet_battery[uav_id],
                 )
 
                 send_telemetry(telemetry)
